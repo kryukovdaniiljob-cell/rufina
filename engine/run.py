@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-import io_excel, metrics, reports, enrich, charts, part3, portfolio, selfcheck
+import io_excel, metrics, reports, enrich, charts, part3, portfolio, selfcheck, brands
 from io_excel import ОшибкаДанных
 from report_docx import word
 from report_html import dashboard
@@ -293,6 +293,7 @@ def main():
     списки["abc_xyz"]    = П["abc_xyz"]
     списки["поставщики"] = П["поставщики"]
     списки["портфель"]   = portfolio.решения(св, факт, cfg, d["_годовой"], лог)
+    списки["бренды"]     = brands.бренды_по_группам(св, списки["sku"], cfg, d["_годовой"], лог)
     списки["коды"]       = П["коды"]
     списки["причины"]    = П["причины"]
     S["часть3"] = {k: v for k, v in П.items()
@@ -333,19 +334,24 @@ def main():
     # Имя отчёта должно отвечать на два вопроса сразу: когда посчитали и
     # по какую дату данные. Выгрузка от 14.09 может содержать продажи по 11.09 -
     # без этого в имени отчёт выглядит устаревшим, хотя он свежий.
+    # Префикс в имени файла: у каждого менеджера своя папка, но отчёты
+    # неизбежно окажутся рядом — в почте, в общей папке, во вложении.
+    # Имена и даты у них одинаковые, различить нельзя.
+    пре = str(cfg.get("отчёты", {}).get("префикс_имени", "") or "").strip()
+    пре = ("(%s) " % пре) if пре else ""
     if дата == сегодня:
         суф = сегодня.isoformat()
     else:
         суф = "%s_данные_по_%s" % (сегодня.isoformat(), дата.strftime("%d.%m"))
     if cfg["отчёты"]["excel"]:
-        сделано.append(безопасно(reports.excel, os.path.join(папка, "Расчёты_%s.xlsx" % суф),
+        сделано.append(безопасно(reports.excel, os.path.join(папка, "%sРасчёты_%s.xlsx" % (пре, суф)),
                                  св, списки, S, cfg, лог))
     if cfg["отчёты"]["word"]:
-        сделано.append(безопасно(word, os.path.join(папка, "Аналитическая_записка_%s.docx" % суф),
+        сделано.append(безопасно(word, os.path.join(папка, "%sАналитическая_записка_%s.docx" % (пре, суф)),
                                  св, списки, S, cfg, лог, гр))
     if cfg["отчёты"]["дашборд"]:
         pass
-        p = безопасно(dashboard, os.path.join(папка, "Дашборд_%s.html" % суф),
+        p = безопасно(dashboard, os.path.join(папка, "%sДашборд_%s.html" % (пре, суф)),
                       св, списки, S, cfg, ряды, лог)
         сделано.append(p)
         docs = os.path.join(КОРЕНЬ, "docs")
