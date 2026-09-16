@@ -64,7 +64,7 @@ def gmroi_по_направлениям(l2: pd.DataFrame, порог: float, п�
     for i, v in enumerate(знач):
         ax.text(v + max(знач) * .012, i, ("%.2f" % v).replace(".", ","),
                 va="center", fontsize=8, color="#333")
-    ax.set_xlabel("GMROI — валовая прибыль за год на рубль запаса")
+    ax.set_xlabel("GMROI - валовая прибыль за год на рубль запаса")
     ax.grid(axis="x", color="#E8EBEF", lw=.8); ax.set_axisbelow(True)
     ax.set_xlim(min(0, min(знач) * 1.15), max(знач) * 1.16)
     return _сохранить(fig, папка, "02_gmroi.png")
@@ -130,12 +130,12 @@ def приоритеты_усилие_эффект(P: list, папка: str) -> 
     for p, xi, yi in zip(P, x, y):
         ax.annotate(p["имя"], (xi, yi), xytext=(0, 16), textcoords="offset points",
                     ha="center", fontsize=8, color="#222")
-    ax.set_xlabel("Усилие: 1 — сделать сразу, 4 — нужны согласования")
+    ax.set_xlabel("Усилие: 1 - сделать сразу, 4 - нужны согласования")
     ax.set_ylabel("Эффект, млн ₽/год")
     ax.set_xticks([1, 2, 3, 4]); ax.set_xlim(.4, 4.6)
     ax.set_ylim(min(0, min(y)) - .4, max(y) * 1.45 + .3)
     ax.grid(color="#E8EBEF", lw=.8); ax.set_axisbelow(True)
-    ax.annotate("размер круга — сколько денег высвобождается", xy=(.02, .94),
+    ax.annotate("размер круга - сколько денег высвобождается", xy=(.02, .94),
                 xycoords="axes fraction", fontsize=7.5, color=СЕРЫЙ)
     return _сохранить(fig, папка, "05_приоритеты.png")
 

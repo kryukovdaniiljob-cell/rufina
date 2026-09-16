@@ -127,7 +127,7 @@ def _таблица(df, порог=None, макс=60):
         for c in d.columns:
             v = r[c]
             if v is None or (isinstance(v, float) and not np.isfinite(v)) or pd.isna(v):
-                яч.append('<td class="num mut">—</td>'); continue
+                яч.append('<td class="num mut">-</td>'); continue
             if c in ДЕНЬГИ_К:
                 яч.append('<td class="num%s">%s</td>' % (" neg" if v < 0 else "", млн(v)))
             elif c in ПРОЦ_К:
@@ -197,7 +197,7 @@ def dashboard(путь, св, списки, S, cfg, ряды, лог=print):
             '<span><i style="background:#5BA85A"></i>Факт</span></div>' +
             _bars(мес, [пл, фк], ["#8A94A0", "#5BA85A"]) +
             '<div class="note" style="border-left-color:%s">План выполнен на <b>%s %%</b> '
-            'за %d завершённых месяцев: %s из %s млн ₽. Текущий месяц не в счёт — он неполный.'
+            'за %d завершённых месяцев: %s из %s млн ₽. Текущий месяц не в счёт - он неполный.'
             '</div></div>' % (цвет, пц(осн["выполнение"]), len(пф.get("полные") or []),
                               млн(осн["факт_полные"]), млн(осн["план_полные"])))
     if лф.get("рост_%") is not None:
@@ -206,7 +206,7 @@ def dashboard(путь, св, списки, S, cfg, ряды, лог=print):
                 % пц(лф.get("макс_сдвиг_доли", 0), 0)) if not лф.get("сопоставимо_по_направлениям", True) else ""
         куски.append('<h2>Сравнение с прошлым годом</h2><div class="card">'
                      '<p>За %d завершённых месяцев: <b>%s</b> млн ₽ в прошлом году против '
-                     '<b>%s</b> млн ₽ в этом — <b>%s %%</b>.</p>%s%s</div>'
+                     '<b>%s</b> млн ₽ в этом - <b>%s %%</b>.</p>%s%s</div>'
                      % (len(лф.get("полные") or []), млн(лф["оборот25"]), млн(лф["оборот26"]),
                         ("%+.1f" % лф["рост_%"]).replace(".", ","), пред,
                         _таблица(pd.DataFrame(лф["по_месяцам"]).rename(columns={
@@ -218,7 +218,7 @@ def dashboard(путь, св, списки, S, cfg, ряды, лог=print):
             ("Поставщики", "поставщики", "Основа для переговоров об условиях поставки"),
             ("Коды проблем из рабочей матрицы", "коды", "Уже размеченная диагностика"),
             ("Почему товара не было", "причины", "У каждой причины свой адресат"),
-            ("Бенчмарк офисов", "бенчмарк", "Цель — уровень медианы, потолок — уровень лучшего")):
+            ("Бенчмарк офисов", "бенчмарк", "Цель - уровень медианы, потолок - уровень лучшего")):
         т = _таблица(списки.get(ключ), порог)
         if т:
             куски.append('<h2>%s</h2><div class="card"><div class="hint">%s</div>%s</div>'
@@ -228,7 +228,7 @@ def dashboard(путь, св, списки, S, cfg, ряды, лог=print):
     for k, v in {
         "__ДАТА__": S["дата"], "__SKU__": цел(S["sku"]), "__KPI__": kpi,
         "__ПОСЧИТАНО__": S.get("посчитано", S["дата"]),
-        "__РАЗРЫВ__": ("<br><span style=\"color:var(--orange)\">Выгрузка от %s, но последние данные в ней — за %s. Отчёт построен по фактическим данным.</span>"
+        "__РАЗРЫВ__": ("<br><span style=\"color:var(--orange)\">Выгрузка от %s, но последние данные в ней - за %s. Отчёт построен по фактическим данным.</span>"
                        % (S["даты"]["дата_файла"], S["дата"]))
                       if S.get("даты", {}).get("дата_файла") and S["даты"]["дата_файла"] != S["дата"] else "",
         "__ПОРОГ__": пц(порог, 2), "__ДНЕЙ__": str(S["дней"]),
@@ -305,9 +305,9 @@ footer{color:var(--mut);font-size:11.5px;margin-top:24px;padding-top:12px;border
 <h1>Категорийный дашборд · дивизион РТГ</h1>
 <div class="sub">Данные по <b>__ДАТА__</b> · расчёт от __ПОСЧИТАНО__ · период __ДНЕЙ__ дней · __SKU__ SKU__РАЗРЫВ__</div>
 <div class="grid">__KPI__</div>
-<div class="note"><b>Как читать:</b> GMROI — валовая прибыль за год на рубль среднего запаса.
-Порог __ПОРОГ__ — стоимость владения запасом. Ниже порога категория не окупает собственное хранение;
-<span class="neg">красное — убыточно</span>, зелёное — заметно выше порога.</div>
+<div class="note"><b>Как читать:</b> GMROI - валовая прибыль за год на рубль среднего запаса.
+Порог __ПОРОГ__ - стоимость владения запасом. Ниже порога категория не окупает собственное хранение;
+<span class="neg">красное - убыточно</span>, зелёное - заметно выше порога.</div>
 
 <h2>Запас и оборот по месяцам, млн ₽</h2>
 <div class="card"><div class="lg"><span><i style="background:#2E5FA3"></i>Запас</span>
@@ -329,8 +329,8 @@ __ЧАСТЬ3__
   </div>
   <div class="crumb" id="cr_hier"></div>
   <div id="t_hier"></div>
-  <div class="hint">Треугольник — раскрыть уровень. Клик по названию — перейти внутрь.
-  Клик по заголовку столбца — сортировка внутри каждой ветки.</div>
+  <div class="hint">Треугольник - раскрыть уровень. Клик по названию - перейти внутрь.
+  Клик по заголовку столбца - сортировка внутри каждой ветки.</div>
 </div>
 
 <h2>Дерево: склады</h2>
@@ -357,12 +357,12 @@ __ЧАСТЬ3__
     <button class="btn" id="cs_brand">выгрузить вид в CSV</button>
   </div>
   <div class="crumb" id="cr_brand"></div><div id="t_brand"></div>
-  <div class="hint">Брендов много — дерево свёрнуто. Разверните нужный треугольником или включите «только проблемные».</div>
+  <div class="hint">Брендов много - дерево свёрнуто. Разверните нужный треугольником или включите «только проблемные».</div>
 </div>
 
 <h2>Прочие срезы</h2>
 <div class="tabs" id="tabsF">
-<button class="tab" aria-selected="true" data-k="seg_xyz">XYZ — стабильность спроса</button>
+<button class="tab" aria-selected="true" data-k="seg_xyz">XYZ - стабильность спроса</button>
 <button class="tab" data-k="seg_abc">ABC по обороту</button>
 <button class="tab" data-k="seg_liq">Ликвидность</button>
 <button class="tab" data-k="seg_st">Статус позиции</button>
@@ -371,7 +371,7 @@ __ЧАСТЬ3__
 <div class="card"><input class="f" id="q_flat" placeholder="Фильтр…"><div id="t_flat"></div></div>
 
 <footer>GMROI = валовая прибыль за год / средний запас по себестоимости. Отчёт сформирован автоматически.
-Полные списки и план работ — в файле Excel рядом с этим дашбордом.</footer>
+Полные списки и план работ - в файле Excel рядом с этим дашбордом.</footer>
 </div>
 <script>
 var D=__ДАННЫЕ__, OWN=__OWN__, GOOD=__GOOD__, LIM=__ЛИМИТ__, MM=__МЕСЯЦЫ__;
@@ -380,10 +380,10 @@ var COLS=[{k:'n',t:'Наименование',f:'t'},{k:'m',t:'Динамика'
 {k:'rev',t:'Оборот, млн ₽',f:'mn'},{k:'mar',t:'Маржа',f:'p'},{k:'st',t:'Запас, млн ₽',f:'mn'},
 {k:'d',t:'Дней запаса',f:'d'},{k:'g',t:'GMROI',f:'g'},{k:'ep',t:'Прибыль − содержание, млн ₽/год',f:'mn'},
 {k:'z',t:'Засолы',f:'p'},{k:'oos',t:'OOS',f:'p'}];
-function nf(v,d){return v==null?'—':v.toLocaleString('ru-RU',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function nf(v,d){return v==null?'-':v.toLocaleString('ru-RU',{minimumFractionDigits:d,maximumFractionDigits:d});}
 function esc(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 function spark(a){
- if(!a||!a.length)return '<td class="num mut">—</td>';
+ if(!a||!a.length)return '<td class="num mut">-</td>';
  var mx=Math.max.apply(null,a)||1,w=58,h=16,n=a.length,bw=w/n;
  var s='<svg class="spark" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">';
  for(var i=0;i<n;i++){var bh=Math.max(1,(a[i]/mx)*(h-2));
@@ -398,7 +398,7 @@ function cell(node,c,имя,q){
    return t;}
  var v=node?node[c.k]:null;
  if(c.f==='sp')return spark(v);
- if(v==null)return '<td class="num mut">—</td>';
+ if(v==null)return '<td class="num mut">-</td>';
  if(c.f==='i')return '<td class="num">'+nf(v,0)+'</td>';
  if(c.f==='mn')return '<td class="num'+(v<0?' neg':'')+'">'+nf(v/1e6,2)+'</td>';
  if(c.f==='p')return '<td class="num">'+nf(v,1)+' %</td>';
