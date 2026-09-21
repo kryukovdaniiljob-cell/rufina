@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Аналитическая записка в Word."""
+"""Аналитическая записка в Word. Оформление по ГОСТ 7.32-2017.
+
+Параметры набора заданы один раз в word(): А4, поля 30/15/20/20 мм,
+Times New Roman 14 пт, полуторный интервал, абзацный отступ 1,25 см,
+выравнивание по ширине. Полужирный - только в заголовках, цвет текста
+чёрный. Таблицы нумеруются сквозной нумерацией, название ставится слева
+над таблицей; иллюстрации подписываются под рисунком по центру.
+"""
 from __future__ import annotations
 import os
 import numpy as np
 import pandas as pd
 from docx import Document
-from docx.shared import Pt, Cm, RGBColor
+from docx.shared import Pt, Cm, Mm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
@@ -13,83 +20,258 @@ from docx.oxml import OxmlElement
 
 from reports import млн, цел, пц, гм, дн, знак
 
-СИНИЙ, КРАСНЫЙ, ЗЕЛЁНЫЙ, ОРАНЖ, СЕРЫЙ = "1F3864", "C00000", "00713C", "C05600", "6B7280"
+ОСН = "Times New Roman"          # рекомендован ГОСТ 7.32-2017, п. 6.1.1
+# Цвета оставлены для совместимости вызовов: по ГОСТ текст чёрный,
+# поэтому в оформлении они не применяются.
+СИНИЙ, КРАСНЫЙ, ЗЕЛЁНЫЙ, ОРАНЖ, СЕРЫЙ = "000000", "000000", "000000", "000000", "000000"
+
+
+def _шрифт_стиля(элемент, имя=ОСН):
+    """Кириллице нужен явный шрифт во всех слотах, иначе Word подставит свой."""
+    rpr = элемент.get_or_add_rPr()
+    f = rpr.find(qn("w:rFonts"))
+    if f is None:
+        f = OxmlElement("w:rFonts"); rpr.append(f)
+    for a in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        f.set(qn(a), имя)
+
+
+def _шрифт_прогона(элемент, имя=ОСН):
+    rpr = элемент.get_or_add_rPr()
+    f = rpr.find(qn("w:rFonts"))
+    if f is None:
+        f = OxmlElement("w:rFonts"); rpr.append(f)
+    for a in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        f.set(qn(a), имя)
+
+
+def _уровень_структуры(параграф, лвл):
+    """Уровень структуры: без него заголовок не попадёт в оглавление."""
+    ppr = параграф._p.get_or_add_pPr()
+    o = ppr.find(qn("w:outlineLvl"))
+    if o is None:
+        o = OxmlElement("w:outlineLvl"); ppr.append(o)
+    o.set(qn("w:val"), str(лвл))
+
+
+def _обновлять_поля(документ):
+    """Word пересчитает оглавление и номера страниц при открытии файла."""
+    s = документ.settings.element
+    u = s.find(qn("w:updateFields"))
+    if u is None:
+        u = OxmlElement("w:updateFields"); s.append(u)
+    u.set(qn("w:val"), "true")
 
 
 def word(путь, св, списки, S, cfg, лог=print, графики=None):
     графики = графики or {}
     порог = S["порог"]
+    # ------------------------------------------------ оформление по ГОСТ 7.32-2017
+    # Меняется ТОЛЬКО вёрстка: набор примитивов ниже. Содержание записки,
+    # порядок разделов и все расчёты остаются прежними - вызовы H, P, B,
+    # TBL, КАРТИНКА и врезка по всему файлу не тронуты.
     doc = Document()
-    st = doc.styles["Normal"]; st.font.name = "Arial"; st.font.size = Pt(10.5)
-    st.element.rPr.rFonts.set(qn("w:eastAsia"), "Arial")
+    st = doc.styles["Normal"]
+    st.font.name = ОСН
+    st.font.size = Pt(14)
+    st.font.color.rgb = RGBColor.from_string("000000")
+    _шрифт_стиля(st.element, ОСН)
+    pf = st.paragraph_format
+    pf.line_spacing = 1.5                 # полтора интервала [1, п. 6.1.1]
+    pf.first_line_indent = Cm(1.25)       # абзацный отступ, одинаковый везде
+    pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pf.space_before = Pt(0)
+    pf.space_after = Pt(0)
+
     sec = doc.sections[0]
-    sec.top_margin = Cm(1.5); sec.bottom_margin = Cm(1.5)
-    sec.left_margin = Cm(1.8); sec.right_margin = Cm(1.4)
+    sec.page_width, sec.page_height = Mm(210), Mm(297)          # А4
+    sec.left_margin, sec.right_margin = Mm(30), Mm(15)          # поля 30/15
+    sec.top_margin, sec.bottom_margin = Mm(20), Mm(20)          # поля 20/20
+    sec.different_first_page_header_footer = True               # титул без номера
+
+    # Сквозные счётчики таблиц и рисунков: нумерация по ГОСТ - арабскими,
+    # сквозная по всему документу.
+    СЧ = {"таб": 0, "рис": 0, "разд": "", "подразд": 0, "имя": "", "занято": set()}
+
+    def _бег(p, курсив=False, жирный=False, кегль=14, цвет=None, текст=""):
+        r = p.add_run(текст)
+        r.bold = жирный
+        r.italic = курсив
+        r.font.size = Pt(кегль)
+        r.font.name = ОСН
+        r.font.color.rgb = RGBColor.from_string(цвет or "000000")
+        _шрифт_прогона(r._element, ОСН)
+        return r
 
     # ---------------------------------------------------------- примитивы
-    def H(t, lvl=1, color=СИНИЙ, size=None):
-        p = doc.add_paragraph(); r = p.add_run(t); r.bold = True
-        r.font.size = Pt(size or (15 if lvl == 1 else 12))
-        r.font.color.rgb = RGBColor.from_string(color); r.font.name = "Arial"
-        p.paragraph_format.space_before = Pt(13 if lvl == 1 else 9)
-        p.paragraph_format.space_after = Pt(5)
+    def H(t, lvl=1, color=None, size=None):
+        """Заголовок. Цвет и кегль игнорируются: по ГОСТ только полужирный.
+
+        Раздел без номера в начале (Содержание, Главное) считается
+        структурным элементом: прописными, по центру, без нумерации.
+        Нумерованный раздел печатается с абзацного отступа. Подразделы
+        нумеруются автоматически внутри своего раздела.
+        """
+        т = str(t).strip()
+        p = doc.add_paragraph()
+        f = p.paragraph_format
+        f.line_spacing = 1.5
+        f.space_before = Pt(0 if lvl == 1 else 12)
+        f.space_after = Pt(12 if lvl == 1 else 6)
+        if lvl == 1:
+            f.page_break_before = True
+            номер = т.split(".", 1)[0]
+            if номер.isdigit():                       # «1. Где лежат деньги»
+                СЧ["разд"], СЧ["подразд"] = номер, 0
+                f.first_line_indent = Cm(1.25)
+                f.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                _бег(p, жирный=True, текст=т.replace(".", "", 1).strip()
+                     and "%s %s" % (номер, т.split(".", 1)[1].strip()) or т)
+            else:                                      # структурный элемент
+                СЧ["разд"], СЧ["подразд"] = "", 0
+                f.first_line_indent = Pt(0)
+                f.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                _бег(p, жирный=True, текст=т.upper())
+            _уровень_структуры(p, 0)
+        else:
+            f.first_line_indent = Cm(1.25)
+            f.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            if СЧ["разд"]:
+                СЧ["подразд"] += 1
+                т = "%s.%d %s" % (СЧ["разд"], СЧ["подразд"], т)
+            _бег(p, жирный=True, текст=т)
+            _уровень_структуры(p, 1)
+        СЧ["имя"] = str(t).strip()
+        return p
 
     def P(t, bold=False, size=10.5, italic=False, color=None, after=5):
-        p = doc.add_paragraph(); r = p.add_run(t)
-        r.bold = bold; r.italic = italic; r.font.size = Pt(size); r.font.name = "Arial"
-        if color: r.font.color.rgb = RGBColor.from_string(color)
-        p.paragraph_format.space_after = Pt(after); p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        """Абзац основного текста. Полужирный по ГОСТ только в заголовках,
+        поэтому bold здесь не применяется; курсив и цвет тоже сняты."""
+        p = doc.add_paragraph()
+        f = p.paragraph_format
+        f.line_spacing = 1.5
+        f.first_line_indent = Cm(1.25)
+        f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        f.space_after = Pt(0)
+        _бег(p, текст=str(t))
         return p
 
     def B(t, size=10.5, bold=False):
-        p = doc.add_paragraph(style="List Bullet"); r = p.add_run(t)
-        r.font.size = Pt(size); r.font.name = "Arial"; r.bold = bold
-        p.paragraph_format.space_after = Pt(3)
+        """Перечисление через тире с абзацного отступа [1, п. 6.4.6]."""
+        p = doc.add_paragraph()
+        f = p.paragraph_format
+        f.line_spacing = 1.5
+        f.first_line_indent = Cm(1.25)
+        f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        f.space_after = Pt(0)
+        _бег(p, текст="- " + str(t))
+        return p
 
     def shade(c, color):
-        tcPr = c._tc.get_or_add_tcPr(); sh = OxmlElement("w:shd")
-        sh.set(qn("w:fill"), color); tcPr.append(sh)
+        """Заливка ячеек по ГОСТ не применяется - оставлено для совместимости."""
+        return None
 
-    def TBL(head, rows, widths=None, fs=8, шапка=СИНИЙ):
-        t = doc.add_table(rows=1, cols=len(head)); t.style = "Table Grid"
+    def _имя_таблицы(head):
+        """Название таблицы: заголовок раздела, при повторе - уточняем графой."""
+        имя = СЧ["имя"] or "Данные расчёта"
+        if имя in СЧ["занято"]:
+            гр = str(head[0]).strip() if head and str(head[0]).strip() else ""
+            имя = "%s (%s)" % (имя, гр.lower()) if гр else "%s (продолжение)" % имя
+        СЧ["занято"].add(имя)
+        return имя
+
+    def TBL(head, rows, widths=None, fs=8, шапка=None, название=None):
+        """Таблица по ГОСТ: ссылка в тексте, название слева над таблицей,
+        сквозная нумерация, шапка по центру, боковик по левому краю."""
+        СЧ["таб"] += 1
+        н = СЧ["таб"]
+        имя = название or _имя_таблицы(head)
+
+        сс = doc.add_paragraph()                      # ссылка в тексте [1, п. 6.6]
+        сс.paragraph_format.line_spacing = 1.5
+        сс.paragraph_format.first_line_indent = Cm(1.25)
+        сс.paragraph_format.space_after = Pt(0)
+        _бег(сс, текст=("Сведения приведены в таблице %d." % н) if н % 2
+                  else ("Результаты сведены в таблице %d." % н))
+
+        пд = doc.add_paragraph()                      # «Таблица N — Название»
+        пд.paragraph_format.line_spacing = 1.0
+        пд.paragraph_format.first_line_indent = Pt(0)
+        пд.paragraph_format.space_before = Pt(6)
+        пд.paragraph_format.space_after = Pt(2)
+        пд.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        _бег(пд, текст="Таблица %d — %s" % (н, имя))
+
+        t = doc.add_table(rows=1, cols=len(head))
+        t.style = "Table Grid"
         t.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        def _яч(c, v, шап):
+            c.text = ""
+            p0 = c.paragraphs[0]
+            p0.paragraph_format.line_spacing = 1.0
+            p0.paragraph_format.first_line_indent = Pt(0)
+            p0.paragraph_format.space_before = Pt(2)
+            p0.paragraph_format.space_after = Pt(2)
+            p0.alignment = (WD_ALIGN_PARAGRAPH.CENTER if шап
+                            else WD_ALIGN_PARAGRAPH.LEFT)
+            _бег(p0, жирный=шап, кегль=12, текст=str(v))
+
         for j, h in enumerate(head):
-            c = t.rows[0].cells[j]; c.text = ""
-            rr = c.paragraphs[0].add_run(str(h)); rr.bold = True
-            rr.font.size = Pt(fs); rr.font.name = "Arial"
-            rr.font.color.rgb = RGBColor.from_string("FFFFFF"); shade(c, шапка)
-            c.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _яч(t.rows[0].cells[j], h, True)
         for row in rows:
             cells = t.add_row().cells
             for j, v in enumerate(row):
-                cells[j].text = ""
-                rr = cells[j].paragraphs[0].add_run(str(v))
-                rr.font.size = Pt(fs); rr.font.name = "Arial"
-                if j > 0: cells[j].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                if str(v).startswith("−") or str(v).startswith("хуже"):
-                    rr.font.color.rgb = RGBColor.from_string(КРАСНЫЙ); rr.bold = True
-                elif str(v).startswith("лучше"):
-                    rr.font.color.rgb = RGBColor.from_string(ЗЕЛЁНЫЙ)
+                _яч(cells[j], v, False)
+                if j > 0:
+                    cells[j].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
         if widths:
             for j, w in enumerate(widths):
-                for rw in t.rows: rw.cells[j].width = Cm(w)
-        doc.add_paragraph().paragraph_format.space_after = Pt(2)
+                for rw in t.rows:
+                    rw.cells[j].width = Cm(w)
+        хв = doc.add_paragraph()
+        хв.paragraph_format.space_after = Pt(6)
+        хв.paragraph_format.line_spacing = 1.0
         return t
 
     def КАРТИНКА(ключ, ширина=17.0, подпись=None):
+        """Иллюстрация с подписью «Рисунок N — ...» под ней [1, п. 6.5]."""
         p = графики.get(ключ)
         if not p or not os.path.exists(p):
             return
-        doc.add_picture(p, width=Cm(ширина))
-        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        if подпись:
-            pp = doc.add_paragraph(); r = pp.add_run(подпись)
-            r.font.size = Pt(8); r.italic = True; r.font.name = "Arial"
-            r.font.color.rgb = RGBColor.from_string(СЕРЫЙ)
-            pp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            pp.paragraph_format.space_after = Pt(8)
+        СЧ["рис"] += 1
+        н = СЧ["рис"]
+        сс = doc.add_paragraph()
+        сс.paragraph_format.line_spacing = 1.5
+        сс.paragraph_format.first_line_indent = Cm(1.25)
+        сс.paragraph_format.space_after = Pt(4)
+        _бег(сс, текст="Данные показаны в соответствии с рисунком %d." % н)
+        doc.add_picture(p, width=Cm(min(ширина, 16.5)))
+        ил = doc.paragraphs[-1]
+        ил.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        ил.paragraph_format.first_line_indent = Pt(0)
+        ил.paragraph_format.space_before = Pt(6)
+        пп = doc.add_paragraph()
+        пп.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        пп.paragraph_format.first_line_indent = Pt(0)
+        пп.paragraph_format.line_spacing = 1.0
+        пп.paragraph_format.space_after = Pt(10)
+        _бег(пп, текст="Рисунок %d — %s" % (н, подпись or СЧ["имя"] or "Динамика"))
 
-    # ---------------------------------------------------------- оформление
+    def врезка(текст, цвет=None, фон=None):
+        """Ключевой вывод. Рамка и заливка по ГОСТ не применяются:
+        вывод печатается обычным текстом с пометкой примечания."""
+        p = doc.add_paragraph()
+        f = p.paragraph_format
+        f.line_spacing = 1.5
+        f.first_line_indent = Cm(1.25)
+        f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        f.space_before = Pt(6)
+        f.space_after = Pt(6)
+        _бег(p, текст="Примечание — %s" % str(текст).lstrip())
+        return p
+
+    # ---------------------------------------------------------- служебное
     БЛОКИ = "▁▂▃▄▅▆▇█"
 
     def спарк(r):
@@ -113,6 +295,9 @@ def word(путь, св, списки, S, cfg, лог=print, графики=None
     def поле(p, код):
         """Вставка поля Word (оглавление, номер страницы)."""
         r = p.add_run()
+        r.font.name = ОСН
+        r.font.size = Pt(14)
+        _шрифт_прогона(r._element, ОСН)
         f1 = OxmlElement("w:fldChar"); f1.set(qn("w:fldCharType"), "begin")
         it = OxmlElement("w:instrText"); it.set(qn("xml:space"), "preserve"); it.text = код
         f2 = OxmlElement("w:fldChar"); f2.set(qn("w:fldCharType"), "separate")
@@ -122,38 +307,13 @@ def word(путь, св, списки, S, cfg, лог=print, графики=None
             r._r.append(el)
         return r
 
-    def врезка(текст, цвет="1F3864", фон="EDF1F7"):
-        """Ключевой вывод в цветной рамке."""
-        t = doc.add_table(rows=1, cols=1); t.style = "Table Grid"
-        c = t.rows[0].cells[0]; c.text = ""
-        shade(c, фон)
-        tcPr = c._tc.get_or_add_tcPr()
-        borders = OxmlElement("w:tcBorders")
-        for сторона, ш in (("left", "24"), ("top", "4"), ("bottom", "4"), ("right", "4")):
-            b = OxmlElement("w:" + сторона)
-            b.set(qn("w:val"), "single"); b.set(qn("w:sz"), ш)
-            b.set(qn("w:color"), цвет if сторона == "left" else "D6DCE5")
-            borders.append(b)
-        tcPr.append(borders)
-        rr = c.paragraphs[0].add_run(текст)
-        rr.font.size = Pt(10.5); rr.font.name = "Arial"; rr.bold = True
-        rr.font.color.rgb = RGBColor.from_string(цвет)
-        c.paragraphs[0].paragraph_format.space_before = Pt(4)
-        c.paragraphs[0].paragraph_format.space_after = Pt(4)
-        doc.add_paragraph().paragraph_format.space_after = Pt(4)
-
-    # колонтитулы
-    hdr = sec.header.paragraphs[0]
-    r = hdr.add_run("Категорийная аналитика РТГ · данные на %s" % S["дата"])
-    r.font.size = Pt(8); r.font.name = "Arial"; r.font.color.rgb = RGBColor.from_string(СЕРЫЙ)
-    hdr.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    ftr = sec.footer.paragraphs[0]; ftr.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = ftr.add_run("стр. "); r.font.size = Pt(8); r.font.name = "Arial"
-    r.font.color.rgb = RGBColor.from_string(СЕРЫЙ)
+    # Колонтитулы по ГОСТ: верхнего нет, внизу только номер страницы
+    # арабскими цифрами по центру, на титульном листе номер не ставится.
+    ftr = sec.footer.paragraphs[0]
+    ftr.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    ftr.paragraph_format.first_line_indent = Pt(0)
+    ftr.paragraph_format.line_spacing = 1.0
     поле(ftr, "PAGE")
-    r = ftr.add_run(" из "); r.font.size = Pt(8); r.font.name = "Arial"
-    r.font.color.rgb = RGBColor.from_string(СЕРЫЙ)
-    поле(ftr, "NUMPAGES")
 
 
     l1, l2, l3 = св["L1_Группа планирования"], св["L2_Направление"], св["L3_Группа 1"]
@@ -615,6 +775,7 @@ def word(путь, св, списки, S, cfg, лог=print, графики=None
                      цел(float(cfg["запас"]["порог_существенности_руб"]))))
     r.font.size = Pt(8); r.italic = True; r.font.name = "Arial"
 
+    _обновлять_поля(doc)
     doc.save(путь)
     лог("   Word: %.0f КБ, графиков вставлено %d" % (os.path.getsize(путь) / 1024, len(графики)))
     return путь
