@@ -16,6 +16,7 @@ import io_excel, metrics, reports, enrich, charts, part3, portfolio, selfcheck, 
 from io_excel import ОшибкаДанных
 from report_docx import word
 from report_html import dashboard
+from report_метод import методика
 
 КОРЕНЬ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ЖУРНАЛ: list[str] = []
@@ -368,6 +369,12 @@ def main():
     if cfg["отчёты"]["word"]:
         сделано.append(безопасно(word, os.path.join(папка, "%sАналитическая_записка_%s.docx" % (пре, суф)),
                                  св, списки, S, cfg, лог, гр))
+    # Методика доклада: третий отчёт рядом с Excel и запиской.
+    # Отвечает не на вопрос «что в данных», а на вопрос «как об этом
+    # говорить»: порядок листов, формулировки, предупреждения.
+    if cfg["отчёты"].get("методика", True):
+        сделано.append(безопасно(методика, os.path.join(папка, "%sМетодика_доклада_%s.docx" % (пре, суф)),
+                                 св, списки, S, cfg, лог))
     if cfg["отчёты"]["дашборд"]:
         pass
         p = безопасно(dashboard, os.path.join(папка, "%sДашборд_%s.html" % (пре, суф)),
